@@ -1,0 +1,12 @@
+# Evidence produced by runs, not checked in unless it backs a RESULTS.md row
+evidence/*
+!evidence/.gitkeep
+fp_*/
+disc_*/
+session_watch.json
+__pycache__/
+*.pyc
+.DS_Store
+
+# Generated delivery document. Build with: make doc
+docs/*.docx
