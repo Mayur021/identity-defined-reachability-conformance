@@ -15,6 +15,12 @@ A negative recorded without a discovery block resolves to **NOT_ESTABLISHED**. I
 not a pass and it is not a failure. It is an absence of evidence, and the report says
 so in those words.
 
+The third outcome is not new. ISAE 3000 modifies a conclusion either for material
+deviation or for the inability to obtain sufficient appropriate evidence, and BSI's
+A5 Audit Methodology states it in those terms: the modification gives a qualified,
+adverse or **disclaimed** conclusion. NOT_ESTABLISHED is the disclaimed case. It is
+named here because in practice it is the one that gets rounded away.
+
 ## The positive control is not optional
 
 A sweep returning nothing is indistinguishable from a service that was not running.
