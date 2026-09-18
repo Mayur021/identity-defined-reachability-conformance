@@ -41,9 +41,13 @@ Three outcomes, not two.
 **NOT_ESTABLISHED.** The evidence needed to judge was never produced. A negative with
 no discovery method recorded, or with no positive control inside the measurement
 window, falls here. It is not a soft fail and it must never be rounded to a pass.
-Most of the value in this document sits in that third outcome, because "we looked and
-found nothing" and "nothing is there" are different claims and only the first is ever
-evidenced.
+
+The outcome is not new. ISAE 3000 modifies a conclusion either for material deviation
+or for the inability to obtain sufficient appropriate evidence, and BSI's A5 Audit
+Methodology states it in those terms: the modification gives a qualified, adverse or
+disclaimed conclusion. NOT_ESTABLISHED is the disclaimed case. What this document does
+is hold reachability to it, because "we looked and found nothing" and "nothing is
+there" are different claims and only the first is ever evidenced.
 
 ## The nine properties
 
