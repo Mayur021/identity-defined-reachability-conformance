@@ -1,0 +1,76 @@
+name: conformance
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: fixtures and harness validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fixtures parse and every property is covered
+        run: |
+          python -m pip install --quiet pyyaml
+          python - <<'PY'
+          import yaml, re, sys
+          fx = yaml.safe_load(open('fixtures/idr.yaml'))
+          ids = {f['property'] for f in fx}
+          declared = set(re.findall(r'^## (IDR-P\d+)', open('properties/IDR-PROPERTIES.md').read(), re.M))
+          missing = declared - ids
+          extra = ids - declared
+          print(f"{len(declared)} properties declared, {len(fx)} fixtures")
+          if missing or extra:
+              print("MISMATCH  missing fixture:", missing, " undeclared property:", extra); sys.exit(1)
+          for f in fx:
+              assert 'expect' in f and 'outcome' in f['expect'], f"{f['id']} has no expected outcome"
+              assert f.get('fails_if'), f"{f['id']} declares no failure conditions"
+          print("every property has a fixture, an expected outcome, and failure conditions")
+          PY
+      - name: Prose count matches the property count
+        run: |
+          python - <<'PY'
+          import re, sys, glob
+          n = len(re.findall(r'^## (IDR-P\d+)', open('properties/IDR-PROPERTIES.md').read(), re.M))
+          words = {1:'one',2:'two',3:'three',4:'four',5:'five',6:'six',7:'seven',8:'eight',9:'nine',10:'ten'}
+          wrong = [w for k, w in words.items() if k != n]
+          # Only the total-count claim: "<word> properties" or "<word> fixtures".
+          # "Five of the nine properties" is fine, the claim there is "nine properties".
+          bad = []
+          for f in sorted(set(glob.glob('*.md') + glob.glob('*/*.md'))):
+              for i, line in enumerate(open(f), 1):
+                  for w in wrong:
+                      if re.search(rf'\b{w}\s+(properties|fixtures)\b', line, re.I):
+                          bad.append(f"{f}:{i}: claims '{w}', suite declares {n} ({words[n]})")
+          print(f"{n} properties declared in properties/IDR-PROPERTIES.md")
+          if bad:
+              print("PROSE DRIFT, a document disagrees with the suite:")
+              [print("  ", b) for b in bad]
+              sys.exit(1)
+          print("no document disagrees with the property count")
+          PY
+      - name: Harness scripts are syntactically valid
+        run: |
+          for s in harness/*.sh; do bash -n "$s" && echo "ok  $s"; done
+          python -m py_compile harness/session_watch.py && echo "ok  harness/session_watch.py"
+      - name: Fingerprint is stable and sensitive
+        run: |
+          bash harness/fingerprint.sh a /tmp/fp >/dev/null
+          bash harness/fingerprint.sh b /tmp/fp >/dev/null
+          bash harness/compare.sh /tmp/fp/fp_a /tmp/fp/fp_b
+          sudo ip route add 203.0.113.0/24 dev lo
+          bash harness/fingerprint.sh c /tmp/fp >/dev/null
+          if bash harness/compare.sh /tmp/fp/fp_a /tmp/fp/fp_c; then
+            echo "FAIL: fingerprint did not detect an added route"; exit 1
+          fi
+          echo "fingerprint detected the change, as required"
