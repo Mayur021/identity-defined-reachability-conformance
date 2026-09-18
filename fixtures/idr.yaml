@@ -1,0 +1,204 @@
+# IDR conformance fixtures.
+#
+# One fixture per property in properties/IDR-PROPERTIES.md. Each declares its
+# inputs, its required evidence, and the outcome that counts as a pass, so a run
+# is judged against the fixture rather than against the runner's opinion.
+#
+# Negatives carry `discovery: required`. A negative outcome recorded without a
+# discovery block resolves to NOT_ESTABLISHED, never PASS. That is the whole
+# reason this file exists rather than a prose checklist.
+
+- id: idr_p1_absence_by_default
+  property: IDR-P1
+  vantage: unenrolled
+  target: [service_address, service_dns_name, fabric_entry_point]
+  discovery: required
+  positive_control:
+    required: true
+    description: >
+      An entitled identity must reach the service inside the same window, or the
+      negative is indistinguishable from a service that was down.
+  expect:
+    path: absent
+    outcome: PASS
+  fails_if:
+    - "any protocol response attributable to the protected service"
+    - "TLS handshake completes against the protected service"
+    - "no positive control inside the window"
+    - "no discovery block"
+
+- id: idr_p2_entitlement_gates_the_path
+  property: IDR-P2
+  vantage: enrolled_unentitled
+  identities:
+    a: {enrolled: true, entitled: true}
+    b: {enrolled: true, entitled: false}
+  discovery: required
+  expect:
+    identity_a_path: present
+    identity_b_path: absent
+    outcome: PASS
+  fails_if:
+    - "identity B completes a transport connection and is refused by the service itself"
+    - "A and B were not measured in the same window"
+
+- id: idr_p3_relationship_survives_relocation
+  property: IDR-P3
+  identity: a
+  locations:
+    - {id: loc1, egress_observed_by: external}
+    - {id: loc2, egress_observed_by: external}
+  requires:
+    distinct_public_egress: true
+    no_reenrolment: true
+    no_new_credential: true
+  fingerprint:
+    capture: [before_move, after_second_access]
+    must_be: identical
+  expect:
+    access_loc1: reachable
+    access_loc2: reachable
+    configuration_invariance: holds
+    outcome: PASS
+  fails_if:
+    - "fingerprint differs in either direction, even if access succeeded"
+    - "egress address asserted rather than externally observed"
+    - "public egress identical at both locations, so no relocation occurred"
+
+- id: idr_p4_permission_does_not_confer_adjacency
+  property: IDR-P4
+  identity: a
+  entitled_to: [protected_service]
+  neighbour:
+    on_same_segment: true
+    confirmed_running: true
+  discovery: required
+  discovery_must_record: swept_range
+  expect:
+    protected_service: reachable
+    neighbour: unreachable
+    outcome: PASS
+  fails_if:
+    - "the swept range did not include the neighbour's address"
+    - "no positive control on the neighbour from inside its own segment"
+
+- id: idr_p5_revocation_removes_the_path
+  property: IDR-P5
+  identity: a
+  sequence: [access_ok, withdraw_entitlement_at_policy_layer_only, access_fails]
+  fingerprint:
+    capture: [before_withdrawal, after_failed_access]
+    must_be: identical
+    except: [policy]
+  discovery: required
+  record:
+    convergence_seconds: required
+  expect:
+    access_after_withdrawal: absent
+    network_layer_invariance: holds
+    policy_state: changed_and_shown
+    outcome: PASS
+  fails_if:
+    - "network-layer fingerprint drifted"
+    - "convergence time not recorded"
+    - "convergence long enough that the property is really eventual, reported as immediate"
+
+- id: idr_p6_alternative_ingress_is_controlled
+  property: IDR-P6
+  vantage: unenrolled
+  enumeration:
+    checked_in: required
+    covers: [every_address, every_interface, every_name]
+  discovery: required
+  expect:
+    path_over_enumerated_surface: absent
+    outcome: PASS_FOR_ENUMERATED_SURFACE
+  fails_if:
+    - "the enumeration is not a checked-in artifact"
+    - "the report claims the property beyond the enumerated surface"
+  note: >
+    This property quantifies over all paths and a test covers only what it looked
+    for. It can never return an unqualified PASS, by construction.
+
+- id: idr_p7_authority_remains_conditional
+  property: IDR-P7
+  identity: a
+  sequence: [session_established_and_flowing, condition_changes_no_operator_action, traffic_on_established_session_stops]
+  trigger:
+    kind: [posture, context, compromise_signal]
+    must_be_already_consumed_by_deployment: true
+  operator_action:
+    expected: none
+    evidenced_from: audit_trail
+  fingerprint:
+    capture: [before_condition_change, after_traffic_stops]
+    must_be: identical
+    except: [policy, context]
+  record:
+    condition_observable_to_last_byte_seconds: required
+    policy_record_update_seconds: where_it_differs
+  expect:
+    established_session_traffic: stops
+    network_layer_invariance: holds
+    outcome: PASS
+  fails_if:
+    - "a new connection is refused while the established session keeps carrying traffic"
+    - "an operator or script withdrew the entitlement, which makes this P5 not P7"
+    - "only the policy record changed and traffic continued"
+    - "no audit evidence that no operator acted"
+  note: >
+    Separates continuous evaluation from evaluation at establishment. Raised by
+    Philip Griffiths as a core IDR design principle.
+
+- id: idr_p8_path_bound_to_distinguishable_actor
+  property: IDR-P8
+  actors:
+    a: {intended_distinct: true}
+    b: {intended_distinct: true}
+  discovery: required
+  attribution:
+    source: enforcement_point
+    must_not_be: self_reported_by_caller
+  revocation_isolation:
+    withdraw_for: a
+    b_retains_path: required
+  credentials_per_actor:
+    enumerated: required
+    unenumerated_credential: NOT_ESTABLISHED
+    reachable_set: union_of_all_held_credentials
+    compared_against: intended_reachability_for_the_actor
+  expect:
+    distinct_identities_in_record: true
+    union_within_intent: true
+    outcome: PASS
+  fails_if:
+    - "both actors resolve to one identity in the enforcement record"
+    - "revoking one actor removes the path for the other, which evidences a shared credential"
+    - "attribution rests on a field the calling actor populates"
+    - "the union of an actor's credentials reaches wider than the intent, even where every single grant is correct"
+    - "withdrawing the actor's entitlement leaves a path open under a second credential it holds"
+
+- id: idr_p9_delegation_does_not_widen_reachability
+  property: IDR-P9
+  identities:
+    a: {entitled_to: [s1]}
+    b: {entitled_to: [s2]}
+  sequence: [a_invokes_b, sweep_from_each_vantage]
+  discovery: required
+  chain_extent:
+    recorded: required
+    source: required
+    if_declared_by_invoking_agent: NOT_ESTABLISHED
+  expect:
+    b_path_to_s1: absent
+    a_path_to_s2: absent
+    delegated_authority: narrower_than_or_equal_to_delegator
+    outcome: PASS
+  fails_if:
+    - "B reaches S1 during or after the invocation"
+    - "A reaches S2"
+    - "delegated authority exceeds the delegator's"
+    - "chain extent taken from the agent's own plan with nothing binding it"
+  note: >
+    Where the extent comes from the gated party, the fold is computed over a set that
+    party chose, so the result is NOT_ESTABLISHED rather than PASS.
