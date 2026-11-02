@@ -4,8 +4,8 @@ Implementation-neutral. Each property is written so a third party can decide pas
 fail from recorded evidence, without reading any implementation's source or
 configuration format.
 
-Nine properties. Five are negatives. A negative result is only as strong as the
-discovery that produced it, so every negative property carries a mandatory
+Ten properties. Eight of them turn on a negative. A negative result is only as strong
+as the discovery that produced it, so every negative property carries a mandatory
 `discovery` block and a claim made without one is not a pass, it is an absence of
 evidence. See `METHOD.md`.
 
@@ -13,7 +13,12 @@ Derived from the distinctions stated in the IDR post series and its comment thre
 absence by default, entitlement as the unit of access, no adjacency from permission,
 controlled alternative ingress, survival across relocation, revocation, authority
 that stays conditional for the life of the session, an actor a path can be attributed
-to, and delegation that does not widen what is reachable.
+to, and delegation that does not widen what is reachable. Two more come from the four
+evaluation questions set out in *Identity-Defined Reachability: Reducing Exposure and
+Connectivity Friction in an Age of Machine-Speed Attack* (Philip Griffiths, CSA,
+30 October 2026): that withdrawal preserves unrelated authorised communication and
+happens within a bound declared in advance, and that enforcement is evidenced during
+failure and not only in the healthy case.
 
 ---
 
@@ -138,8 +143,20 @@ routing, firewall, NAT or VPN configuration.
 - The time between withdrawal and loss of path is recorded. A property that only
   holds after a long convergence delay is a different property and should be reported
   as such rather than rounded to a pass.
+- **The bound is declared before the run.** A deployment claiming withdrawal inside a
+  stated period is judged against that period. One that states no period has its
+  convergence time recorded and the within-bound claim resolves to NOT_ESTABLISHED,
+  because a measurement with nothing to compare it against is a number, not a result.
+  The declaration is captured before the withdrawal and MUST NOT be written after the
+  time is known.
+- **Unrelated authorised communication survives.** A second entitled identity B, with
+  its own authorised relationship, holds a path across the whole window and is
+  measured in it. B losing its path is a failure of this property even where A's path
+  closed exactly as intended. A withdrawal that takes bystanders with it is a
+  different control, and one that an availability owner will reverse.
 
-**Evidence required.** Paired fingerprints. Policy state before and after. Timing.
+**Evidence required.** Paired fingerprints. Policy state before and after. Timing,
+against the declared bound where one exists. B's path at both ends of the window.
 
 ---
 
@@ -199,10 +216,15 @@ ones. Updating the policy record alone is insufficient."
   recorded separately where it differs, because updating the record is not the control.
 - Configuration invariance holds as in P3 and P5: only policy and context state may
   differ, and the network layer MUST be unchanged.
+- The declared bound and the bystander requirement carry over from P5 unchanged. The
+  interval is judged against a period declared before the condition was introduced,
+  and a second entitled identity whose context did not change keeps its path across
+  the window.
 
 **Evidence required.** The condition and the time it became observable. Last byte on
 the pre-existing session. Audit trail showing no operator action. Paired fingerprints.
-Policy-record update time where it is a separate number.
+Policy-record update time where it is a separate number. The declared bound. The
+bystander identity's path at both ends of the window.
 
 ---
 
@@ -295,6 +317,58 @@ during the chain. The extent declaration and who authored it.
 
 ---
 
+## IDR-P10 — Enforcement holds when the control plane does not
+
+**Property.** The deployment declares in advance what becomes of an authorised path
+when the evaluator is unreachable, and then does that.
+
+**Why this is a property and not a caveat.** Continuous conditionality implies a
+dependency on the evaluator being reachable. If an established path survives an
+unreachable controller then authority is not continuously conditional for the length
+of the outage. If it does not, a control-plane outage is a total outage. Both are
+defensible and they are different systems. What is not defensible is leaving it
+undeclared, which lets one deployment claim continuous evaluation in the architecture
+document and availability in the runbook. This property tests the declaration. It has
+no preferred answer.
+
+**Acceptance criteria**
+
+- Before the run the deployment declares one of `fail_closed`, established paths stop
+  when the evaluator is unreachable, or `fail_static`, established paths continue on
+  the last decision taken. With it, the maximum period it claims a path may carry
+  traffic without a fresh decision. The declaration is captured in the environment
+  record **before** the partition and MUST NOT be written once the behaviour is known.
+- Identity A establishes a session that policy permits, and traffic flows.
+- The evaluator is made unreachable from the enforcement point. The partition MUST be
+  effected outside the access-relevant set the fingerprint covers, and the method is
+  recorded.
+- Traffic on the **already established** session is observed against the declaration.
+  `fail_closed` requires it to stop inside the declared period. `fail_static` requires
+  it to continue, and the observation window MUST exceed the declared maximum, or the
+  run evidences only that nothing happened yet.
+- A path is attempted by an entitled identity during the partition, under the P1
+  discovery method. Whether it succeeds is recorded against the declaration rather
+  than scored: admitting new paths while unable to evaluate is a defensible choice and
+  an undeclared one is not.
+- The evaluator is restored. Where the declaration is `fail_static`, the first decision
+  after restoration MUST be shown to have been taken rather than assumed, by applying
+  a withdrawal during the partition and evidencing that it takes effect after it.
+- Configuration invariance holds as in P3: only the partition and the policy state may
+  differ, and the network layer at the enforcement point MUST be unchanged.
+
+**NOT_ESTABLISHED, specifically.** No declaration captured before the partition. A
+declaration written or amended after the behaviour was observed. An observation window
+shorter than the declared maximum under `fail_static`. A partition that also severed
+the data path, which evidences nothing about the control plane and is the easy way to
+get a clean-looking `fail_closed`.
+
+**Evidence required.** The declaration with its capture time. The partition method,
+start and end. Last byte on the established session, or the baseline showing it
+carried traffic throughout. The in-partition discovery block. Paired fingerprints. The
+post-restoration decision where the declaration is `fail_static`.
+
+---
+
 ## A note on chain extent, for whatever consumes these properties
 
 A reachability decision that folds a multi-step chain to its highest-impact class
@@ -302,7 +376,7 @@ depends on knowing the chain's extent. Where the agent supplies its own plan, th
 fold is computed over a set chosen by the party being gated, so the fold is only as
 trustworthy as the extent declaration underneath it.
 
-This is out of scope for the nine properties above, which test paths rather than
+This is out of scope for the ten properties above, which test paths rather than
 chains. It is recorded here because any framework that cites a chain-fold rule as a
 control inherits the extent problem with it, and the properties should not be read
 as covering something they do not touch.
@@ -315,7 +389,7 @@ Declarations*, doi.org/10.5281/zenodo.22649163, section 4, CC BY 4.0.
 ## What these properties do not cover
 
 Stated here so the set is not read as a completeness claim. Each of these is a real
-question and none of the nine touches it.
+question and none of the ten touches it.
 
 **Enrolment.** Every property begins after an identity exists. Enrolment itself is
 typically a one-time token, and whoever holds it becomes the identity it names. That
@@ -328,12 +402,6 @@ time. Reachability governed by a control plane fails all at once, because the co
 plane is what grants every path. The trade is a broad low-value surface for a narrow
 total one, which is a good trade only if the narrow one is defended accordingly. These
 properties assume a correct control plane and evidence nothing about it.
-
-**Behaviour under control-plane partition.** Continuous conditionality implies a
-dependency on the evaluator being reachable. If established sessions survive an
-unreachable controller then authority is not continuously conditional; if they do not
-then a control-plane outage is a total outage. Both are defensible, they are different
-systems, and the difference is measurable. Nothing here measures it.
 
 **Visibility for the defender.** A path that exists only between two authorised
 endpoints is not on a wire anyone can capture. Evidence then comes from the control

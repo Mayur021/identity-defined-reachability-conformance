@@ -1,6 +1,6 @@
 % Identity-Defined Reachability: Properties and Acceptance Criteria
 % Mayur Agnihotri, StraightArc Technologies Pvt. Ltd.
-% Draft 0.1, 17 September 2026
+% Draft 0.2, 2 November 2026
 
 ## Status of this document
 
@@ -17,6 +17,16 @@ Derived from the Identity-Defined Reachability post series and from the CSA blog
 material, so that where these properties agree with existing practitioner work the
 agreement is independent rather than inherited.
 
+Draft 0.2 adds three things that come from a later and also public source, the CSA
+blog *Identity-Defined Reachability: Reducing Exposure and Connectivity Friction in an
+Age of Machine-Speed Attack* (Philip Griffiths, 30 October 2026). Two of its four
+evaluation questions ask for something Draft 0.1 did not test: that a withdrawal
+preserves unrelated authorised communication and lands inside a bound declared in
+advance, and that enforcement is evidenced during failure. The first two became
+criteria on P5 and P7. The third became P10. They are marked here because the
+independence that applies to Draft 0.1 does not apply to them: they are derived from
+his published questions and are his in origin.
+
 Offered as a contribution to the CSA ZT5 Identity-Defined Reachability deliverable.
 
 ## Purpose
@@ -25,7 +35,7 @@ Identity-defined reachability makes claims that are mostly negatives: a path is
 absent, an unentitled identity has none, permission confers no adjacency. Negatives
 are the hardest class of claim to evidence and the easiest to assert.
 
-This document defines nine properties and the criteria under which each can be judged
+This document defines ten properties and the criteria under which each can be judged
 to hold. Each is written so a third party can decide pass or fail from recorded
 evidence, without reading any implementation's source or configuration format. An
 implementation is then a row in a results table rather than the argument itself.
@@ -49,7 +59,7 @@ disclaimed conclusion. NOT_ESTABLISHED is the disclaimed case. What this documen
 is hold reachability to it, because "we looked and found nothing" and "nothing is
 there" are different claims and only the first is ever evidenced.
 
-## The nine properties
+## The ten properties
 
 ### P1. Absence by default
 
@@ -130,6 +140,15 @@ What matters is when the already established session stops carrying traffic, bec
 the connection that is already up is the one an out-of-scope action is travelling on.
 Both numbers belong in the evidence, timestamped from the same clock.
 
+Two further criteria, added in Draft 0.2. The bound is declared before the run, so the
+interval has something to be judged against: a deployment claiming withdrawal inside a
+stated period is held to it, and one stating no period has its time recorded while the
+within-bound claim resolves to NOT_ESTABLISHED. And unrelated authorised communication
+survives: a second entitled identity with its own relationship holds a path across the
+window and is measured in it. Losing the bystander is a failure even where A's path
+closed exactly as intended, because a withdrawal that takes bystanders with it is a
+different control and an availability owner will reverse it.
+
 ### P6. Alternative ingress is controlled
 
 No path to the protected service exists by any route other than an authorised
@@ -164,7 +183,8 @@ connection being refused while the existing one continues is a failure, and it i
 exact shape this property exists to detect. The interval is recorded from the condition
 becoming observable to the last byte delivered, with policy-record update time recorded
 separately where it differs, because updating the record is not the control.
-Configuration invariance holds as in P3 and P5.
+Configuration invariance holds as in P3 and P5. The declared bound and the bystander
+requirement carry over from P5 unchanged.
 
 ### P8. A path is bound to a distinguishable actor
 
@@ -217,6 +237,36 @@ evidenced. The chain's extent is recorded with its source; where the extent come
 the invoking agent's own plan the result is NOT_ESTABLISHED, because the fold was
 computed over a set the gated party chose.
 
+### P10. Enforcement holds when the control plane does not
+
+The deployment declares in advance what becomes of an authorised path when the
+evaluator is unreachable, and then does that.
+
+Continuous conditionality implies a dependency on the evaluator being reachable. If an
+established path survives an unreachable controller then authority is not continuously
+conditional for the length of the outage. If it does not, a control-plane outage is a
+total outage. Both are defensible and they are different systems. What is not
+defensible is leaving it undeclared, which lets one deployment claim continuous
+evaluation in the architecture document and availability in the runbook. This property
+has no preferred answer. It tests the declaration.
+
+*Criteria.* Before the run the deployment declares `fail_closed` or `fail_static`, and
+the maximum period it claims a path may carry traffic without a fresh decision. The
+declaration is captured before the partition and is not written once the behaviour is
+known. Identity A establishes a permitted session and traffic flows. The evaluator is
+made unreachable from the enforcement point, by a method recorded and effected outside
+the set the fingerprint covers. Traffic on the already established session is observed
+against the declaration, and under `fail_static` the observation window exceeds the
+declared maximum or the run evidences only that nothing has happened yet. A path is
+attempted by an entitled identity during the partition and the result is recorded
+against the declaration rather than scored. The evaluator is restored, and under
+`fail_static` the first decision after restoration is shown to have been taken rather
+than assumed. Configuration invariance holds as in P3.
+
+The easy way to produce a clean-looking `fail_closed` is to sever the data path along
+with the control plane. That evidences nothing about the control plane and is a
+NOT_ESTABLISHED, not a pass.
+
 ## Prior art
 
 These properties were reconciled against existing practitioner material before
@@ -227,7 +277,7 @@ sent to that author rather than restated here.
 
 ### What a negative means here
 
-Five of the nine properties are negatives. Each recorded negative carries the sweep that
+Eight of the ten properties turn on a negative. Each recorded negative carries the sweep that
 produced it: the target list and its hash, timeouts, retry count, vantage point, and the
 versions of the tools used. A negative without that block records as NOT_ESTABLISHED.
 
@@ -256,7 +306,7 @@ thing under test.
 
 ## Harness status
 
-Three scripts exist and are tested in both directions.
+Every script is tested in both directions, and CI proves it on each push.
 
 `fingerprint.sh` and `compare.sh` implement configuration invariance. Two captures with
 no change between them produce an identical combined digest. A single added route
@@ -267,8 +317,22 @@ non-zero.
 closed targets it reports no path over the swept surface. Against a live listener it
 reports the path, which is the positive control working.
 
-Not yet built: the relocation rig. P3 needs two vantage points with genuinely different
-public egress, which is lab work rather than script work.
+`egress.sh` records the public egress address at a vantage point as reported by several
+independent external observers, which must agree. One observer answering, or two
+disagreeing, is NOT_ESTABLISHED rather than a majority vote, because a split answer means
+something in the path is rewriting the view and that is the thing P3 is trying to see.
+
+`relocate.sh` adjudicates P3 from two vantage records after the fact, offline. It treats
+the claim as conjunctive and refuses to collapse it: access at both ends is necessary and
+not sufficient, identical egress at both locations means no relocation occurred and there
+is nothing to judge, and any drift in the access-relevant configuration fails the property
+whatever access did.
+
+`compare.sh` re-derives each capture from its own manifest before comparing anything, so a
+component file edited after capture is refused as evidence rather than scored.
+
+What remains lab work for P3 is the part no script can take over: two vantage points with
+genuinely different public egress. The rest of it is now script work.
 
 No runs are recorded. The results table is empty by design until one is.
 
@@ -279,7 +343,7 @@ depends on knowing the chain's extent. Where the agent supplies its own plan, th
 is computed over a set chosen by the party being gated, so the fold is only as
 trustworthy as the extent declaration underneath it.
 
-This is outside the nine properties above, which test paths rather than chains. It is
+This is outside the ten properties above, which test paths rather than chains. It is
 recorded because any framework that cites a chain-fold rule as a control inherits the
 extent problem with it, and these properties should not be read as covering something
 they do not touch.
@@ -301,10 +365,6 @@ at the front of an architecture built to remove them. Not tested here.
 Control-plane-governed reachability fails all at once. The trade is a broad low-value
 surface for a narrow total one, good only if the narrow one is defended accordingly.
 These properties assume a correct control plane.
-
-**Behaviour under control-plane partition.** If established sessions survive an
-unreachable controller, authority is not continuously conditional. If they do not, an
-outage is total. Both are defensible and the difference is measurable. Not measured here.
 
 **Visibility for the defender.** A path between two authorised endpoints is not on a
 wire anyone can capture, so evidence comes from the control plane, making it sole

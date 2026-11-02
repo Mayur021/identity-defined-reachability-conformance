@@ -12,6 +12,8 @@ separate evidence from an assertion, and an entry missing them is not a claim.
 | _(none yet)_ | | | | | | | | | |
 
 Result cell records outcomes per property, e.g.
-`P1 PASS · P2 PASS · P3 PASS · P4 NOT_ESTABLISHED · P5 PASS · P6 PASS_FOR_ENUMERATED_SURFACE`.
+`P1 PASS · P2 PASS · P3 PASS · P4 NOT_ESTABLISHED · P5 PASS · P6 PASS_FOR_ENUMERATED_SURFACE ·
+P7 PASS · P8 NOT_ESTABLISHED · P9 NOT_ESTABLISHED · P10 PASS`. A property not exercised is
+left out of the cell rather than recorded as a pass.
 
 NOT_ESTABLISHED is a first-class outcome and is never rounded to either PASS or FAIL.

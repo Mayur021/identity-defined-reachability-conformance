@@ -73,4 +73,76 @@ jobs:
           if bash harness/compare.sh /tmp/fp/fp_a /tmp/fp/fp_c; then
             echo "FAIL: fingerprint did not detect an added route"; exit 1
           fi
+          sudo ip route del 203.0.113.0/24 dev lo
           echo "fingerprint detected the change, as required"
+      - name: Compare refuses a capture altered after it was written
+        run: |
+          bash harness/fingerprint.sh t1 /tmp/tamper >/dev/null
+          cp -r /tmp/tamper/fp_t1 /tmp/tamper/fp_t2
+          echo "203.0.113.0/24 dev lo scope link" >> /tmp/tamper/fp_t2/routes
+          set +e
+          bash harness/compare.sh /tmp/tamper/fp_t1 /tmp/tamper/fp_t2; rc=$?
+          set -e
+          if [ "$rc" -ne 3 ]; then
+            echo "FAIL: an edited component file was not caught by the manifest check (exit $rc, wanted 3)"; exit 1
+          fi
+          echo "an altered capture is refused as evidence, as required"
+      - name: Relocation adjudicator decides P3 conjunctively
+        run: |
+          mk() {  # mk <dir> <egress> <access> <reenrol> <newcred> <fpsrc>
+            mkdir -p "$1"
+            printf 'vantage_id: %s\nobserver_source: external\nobserved_egress: %s\n' "$(basename "$1")" "$2" > "$1/vantage"
+            printf 'access: %s\nreenrolment: %s\nnew_credential: %s\n' "$3" "$4" "$5" > "$1/access"
+            cp -r "$6" "$1/fp"
+          }
+          bash harness/fingerprint.sh r /tmp/rel >/dev/null
+          B=/tmp/rig
+          mk $B/a 198.51.100.7 reachable no no /tmp/rel/fp_r
+          mk $B/b 203.0.113.9  reachable no no /tmp/rel/fp_r
+          mk $B/same 198.51.100.7 reachable no no /tmp/rel/fp_r
+          mk $B/gone 203.0.113.9 absent    no no /tmp/rel/fp_r
+          mk $B/re   203.0.113.9 reachable yes no /tmp/rel/fp_r
+          mk $B/cred 203.0.113.9 reachable no yes /tmp/rel/fp_r
+          mk $B/ne   NOT_ESTABLISHED reachable no no /tmp/rel/fp_r
+          check() {  # check <want> <dir>
+            set +e; bash harness/relocate.sh $B/a "$2" >/dev/null 2>&1; rc=$?; set -e
+            if [ "$rc" -ne "$1" ]; then echo "FAIL: $2 gave $rc, wanted $1"; exit 1; fi
+            echo "ok  $(basename $2) -> $rc"
+          }
+          check 0 $B/b
+          check 2 $B/same
+          check 1 $B/gone
+          check 1 $B/re
+          check 1 $B/cred
+          check 2 $B/ne
+          mkdir -p $B/empty && check 2 $B/empty
+          echo "P3 is adjudicated conjunctively: access at both ends is necessary and not sufficient"
+      - name: Egress refuses a single observer and a split answer
+        run: |
+          python3 - <<'PY' &
+          import http.server, socketserver, threading, time
+          def mk(port, body):
+              class H(http.server.BaseHTTPRequestHandler):
+                  def do_GET(s):
+                      s.send_response(200); s.end_headers(); s.wfile.write(body.encode())
+                  def log_message(s,*a): pass
+              socketserver.TCPServer.allow_reuse_address = True
+              socketserver.TCPServer(("127.0.0.1", port), H).serve_forever()
+          for p,b in ((18201,"198.51.100.7"),(18202,"198.51.100.7"),(18203,"203.0.113.9")):
+              threading.Thread(target=mk, args=(p,b), daemon=True).start()
+          time.sleep(60)
+          PY
+          sleep 3
+          set +e
+          OBSERVER_URLS="http://127.0.0.1:18201/ http://127.0.0.1:19999/x" EGRESS_TIMEOUT=3 \
+            bash harness/egress.sh one /tmp/eg >/dev/null 2>&1; one=$?
+          OBSERVER_URLS="http://127.0.0.1:18201/ http://127.0.0.1:18203/" EGRESS_TIMEOUT=3 \
+            bash harness/egress.sh split /tmp/eg >/dev/null 2>&1; split=$?
+          OBSERVER_URLS="http://127.0.0.1:18201/ http://127.0.0.1:18202/" EGRESS_TIMEOUT=3 \
+            bash harness/egress.sh agree /tmp/eg >/dev/null 2>&1; agree=$?
+          set -e
+          [ "$one"   -eq 2 ] || { echo "FAIL: one observer gave $one, wanted 2"; exit 1; }
+          [ "$split" -eq 2 ] || { echo "FAIL: split answer gave $split, wanted 2"; exit 1; }
+          [ "$agree" -eq 0 ] || { echo "FAIL: agreeing observers gave $agree, wanted 0"; exit 1; }
+          grep -q "observed_egress: 198.51.100.7" /tmp/eg/egress_agree/vantage
+          echo "egress is NOT_ESTABLISHED on one observer and on disagreement, observed only on agreement"

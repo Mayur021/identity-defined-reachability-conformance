@@ -2,7 +2,7 @@
 
 ## Why this file exists
 
-Five of the nine properties are negatives. A negative result carries no information
+Eight of the ten properties turn on a negative. A negative result carries no information
 unless the reader can tell what was looked for. "No path was found" and "no path
 exists" are different claims, and only the first is ever evidenced.
 
@@ -54,6 +54,48 @@ Both directions are tested in `harness/`: two captures with no change produce an
 identical digest, and a single added route produces drift, names the component, and
 exits non-zero.
 
+A fingerprint is evidence about a moment that has passed, so `compare.sh` re-derives
+every component digest from the file on disk and checks it against the manifest written
+at capture time before it compares anything. Without that step a component file can be
+edited afterwards while the recorded digests still agree with each other. A capture that
+does not match its own manifest is refused outright rather than scored, because the
+question is no longer whether the configuration drifted but whether the record of it can
+be relied on at all.
+
+
+## A measurement needs something to be measured against
+
+P5, P7 and P10 all produce an interval, and an interval on its own is a number rather
+than a result. The bound is therefore declared before the run and captured before the
+thing being timed happens. A deployment claiming withdrawal inside a stated period is
+held to that period. One that states none has its time recorded and the within-bound
+claim resolves to NOT_ESTABLISHED, because there was nothing to compare it against.
+
+The ordering is the control. A bound written once the time is known is not a bound, it
+is a description, and it will always be met.
+
+## Blast radius is part of the property
+
+A withdrawal that closes the path it was aimed at and takes unrelated authorised
+communication with it has not done the right thing, even though the path it targeted
+closed exactly as intended. P5 and P7 therefore carry a bystander: a second entitled
+identity, with its own relationship and no reason to be affected, holding a path across
+the whole window and measured inside it. This is not a performance concern. A control
+that cannot be used without collateral will be turned off by whoever owns availability,
+and a property set that never looks for the collateral will not predict that.
+
+## Partition the control plane, not the data path
+
+P10 asks what an authorised path does when the evaluator is unreachable. The easy way
+to produce a clean-looking `fail_closed` is to sever the data path along with the
+control plane, at which point traffic stops for a reason that has nothing to do with
+enforcement. The partition is therefore required to be effected outside the set the
+fingerprint covers, and the method is recorded so a reader can check it.
+
+The property has no preferred answer. `fail_closed` and `fail_static` are both
+defensible and they are different systems. What it refuses is an undeclared answer,
+which is what lets a deployment claim continuous evaluation in one document and
+availability in another.
 
 ## Measuring the established session
 

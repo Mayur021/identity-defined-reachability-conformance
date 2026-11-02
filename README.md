@@ -5,7 +5,9 @@ harness, for the claims made by identity-defined reachability: that a usable pat
 a protected service is absent by default, that entitlement rather than topology is
 the unit of access, that an authorised relationship survives a change of network
 location without touching the network, and that permission to one service confers no
-adjacency to its neighbours.
+adjacency to its neighbours. Three further properties cover what a withdrawal does
+to everything it was not aimed at, whether it lands inside a bound stated in advance,
+and what becomes of an authorised path when the evaluator cannot be reached.
 
 The properties are the artifact. Any implementation is one row in `RESULTS.md`.
 
@@ -40,10 +42,12 @@ writing them down separately from the argument they support.
 
 | Path | What it is |
 |---|---|
-| `properties/IDR-PROPERTIES.md` | Nine properties with acceptance criteria. Implementation-neutral. |
-| `fixtures/idr.yaml` | The same nine as machine-readable fixtures with expected outcomes and failure conditions. |
-| `harness/fingerprint.sh` | Configuration-invariance capture for P3 and P5. |
-| `harness/compare.sh` | Fingerprint comparison. Exit 0 identical, 1 drift. |
+| `properties/IDR-PROPERTIES.md` | Ten properties with acceptance criteria. Implementation-neutral. |
+| `fixtures/idr.yaml` | The same ten as machine-readable fixtures with expected outcomes and failure conditions. |
+| `harness/fingerprint.sh` | Configuration-invariance capture for P3, P5, P7 and P10. |
+| `harness/compare.sh` | Fingerprint comparison, after re-deriving each capture from its own manifest. Exit 0 identical, 1 drift, 2 an excepted component did not move, 3 the capture was altered after it was written. |
+| `harness/egress.sh` | Externally observed public egress for P3, from several independent observers that must agree. |
+| `harness/relocate.sh` | P3 adjudicator over two vantage records. Decides the conjunctive claim, offline. |
 | `harness/environment.sh` | Captures what was tested, by whom, on what, and the limits that bound the run. |
 | `harness/discover.sh` | Discovery sweep for the negative properties. Emits the discovery block. |
 | `harness/session_watch.py` | Established-session liveness for P5 and P7. Records last byte delivered. |
@@ -60,18 +64,26 @@ prevent.
 
 ## Status
 
-Properties and fixtures: complete, nine of each.
+Properties and fixtures: complete, ten of each.
 
-Harness: `fingerprint.sh`, `compare.sh`, `discover.sh` and `session_watch.py` are
-written and tested in both directions. The fingerprint returns an identical digest
-across two captures with no change, and detects a single added route. The discovery
-sweep reports no path against closed targets and detects a live listener as a positive
-control. The session watch records last-byte-delivered when an established connection
-is torn down mid-flight, and exits 2 rather than reporting a false end when the session
-never established.
+Harness: every script is written and tested in both directions, and CI proves it on
+each push. The fingerprint returns an identical digest across two captures with no
+change and detects a single added route. `compare.sh` re-derives each capture from its
+own manifest before comparing anything, and refuses a capture whose component file was
+edited after it was written, which the recorded digests alone would not have caught.
+The discovery sweep reports no path against closed targets and detects a live listener
+as a positive control. The session watch records last-byte-delivered when an
+established connection is torn down mid-flight, and exits 2 rather than reporting a
+false end when the session never established. `egress.sh` returns NOT_ESTABLISHED on a
+single observer and on disagreement between observers, and an address only when
+independent observers agree. `relocate.sh` decides P3 across all seven of its branches.
 
-Not yet built: the relocation rig. P3 needs two vantage points with genuinely
-different public egress, which is lab work rather than script work.
+**What is still lab work, and what is not.** P3 needs two vantage points with
+genuinely different public egress. That has not changed and no script can change it.
+What has changed is that the rest of P3 is now script work: `egress.sh` produces the
+externally observed vantage record at each location, and `relocate.sh` adjudicates the
+pair offline afterwards. The remaining step is to run the first at two places and carry
+the two directories to one host. A run is still a run.
 
 No runs recorded. `RESULTS.md` is empty by design until one is.
 
@@ -100,7 +112,7 @@ highest-impact classification present anywhere in it. Any reachability framework
 cites that fold as a control inherits an open question with it: the rule says nothing
 about who establishes the chain's extent, and where the agent supplies its own plan the
 fold is computed over a set the gated party chose. That is recorded in
-`properties/IDR-PROPERTIES.md` as explicitly outside the nine properties, so they are
+`properties/IDR-PROPERTIES.md` as explicitly outside the ten properties, so they are
 not read as covering something they do not test.
 
 That open edge is not an original observation here. It is stated in Bharti and
